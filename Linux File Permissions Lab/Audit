@@ -1,0 +1,72 @@
+#!/bin/bash
+# =============================================================
+# Scenario 3 — Permission Auditing
+# Finds dangerous files: world-writable, orphaned, SUID
+# =============================================================
+
+echo "=============================================="
+echo " SCENARIO 3: Permission Auditing"
+echo "=============================================="
+
+REPORT_FILE="audit_report_$(date +%Y%m%d_%H%M%S).txt"
+
+echo "[+] Starting audit — results saved to: $REPORT_FILE"
+echo ""
+
+# --- Setup: create some intentionally dangerous files for the lab ---
+echo "[+] Setting up lab environment (creating intentionally bad files)..."
+sudo touch /tmp/world_writable_test.sh
+sudo chmod 777 /tmp/world_writable_test.sh
+sudo bash -c 'echo "#!/bin/bash\necho hello" > /tmp/world_writable_test.sh'
+
+# --- Begin audit ---
+{
+  echo "=============================="
+  echo " LINUX PERMISSION AUDIT REPORT"
+  echo " Generated: $(date)"
+  echo " Host: $(hostname)"
+  echo "=============================="
+  echo ""
+
+  echo "--- [1] WORLD-WRITABLE FILES ---"
+  echo "Risk: Any user can modify these files."
+  find /tmp /home /company 2>/dev/null -type f -perm -o+w
+  echo ""
+
+  echo "--- [2] WORLD-WRITABLE DIRECTORIES ---"
+  echo "Risk: Any user can create/delete files inside."
+  find /tmp /home /company 2>/dev/null -type d -perm -o+w
+  echo ""
+
+  echo "--- [3] FILES WITH NO OWNER (orphaned) ---"
+  echo "Risk: No accountability — common after user deletion."
+  find /home /company 2>/dev/null -nouser -o -nogroup
+  echo ""
+
+  echo "--- [4] SUID FILES ---"
+  echo "Risk: If exploited, allows privilege escalation."
+  find /usr/bin /usr/sbin /bin /sbin 2>/dev/null -perm /4000 -type f
+  echo ""
+
+  echo "--- [5] SGID FILES ---"
+  find /usr/bin /usr/sbin /bin /sbin 2>/dev/null -perm /2000 -type f
+  echo ""
+
+  echo "=============================="
+  echo " END OF REPORT"
+  echo "=============================="
+
+} | tee "$REPORT_FILE"
+
+# --- Fix the dangerous file we created ---
+echo ""
+echo "[+] Fixing world-writable file found in audit..."
+sudo chmod o-w /tmp/world_writable_test.sh
+echo "    /tmp/world_writable_test.sh → permissions fixed (removed world-write)"
+
+echo ""
+echo "[*] Verification after fix:"
+ls -la /tmp/world_writable_test.sh
+
+echo ""
+echo "[OK] Scenario 3 complete. Report saved: $REPORT_FILE"

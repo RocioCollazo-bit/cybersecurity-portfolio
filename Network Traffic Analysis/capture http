@@ -1,0 +1,96 @@
+#!/bin/bash
+# =============================================================
+# Scenario 4 — HTTP Traffic Capture & Inspection
+# Demonstrates why plain HTTP is dangerous
+# =============================================================
+
+echo "=============================================="
+echo " HTTP TRAFFIC CAPTURE & INSPECTION"
+echo "=============================================="
+
+mkdir -p captures
+
+# --- Capture HTTP traffic ---
+echo "[+] Starting HTTP capture..."
+sudo tcpdump -i any port 80 -c 80 -w captures/http_traffic.pcap 2>/dev/null &
+TCPDUMP_PID=$!
+
+sleep 1
+
+# --- Generate HTTP traffic ---
+echo "[+] Generating HTTP traffic..."
+
+# Normal GET requests
+echo "    → GET request to example.com"
+curl -s http://example.com > /dev/null 2>&1
+
+echo "    → GET request to httpbin.org"
+curl -s http://httpbin.org/get > /dev/null 2>&1
+
+echo "    → GET with custom headers"
+curl -s -H "X-Custom-Header: test-value" http://httpbin.org/headers > /dev/null 2>&1
+
+echo "    → POST request simulating a form submission"
+curl -s -X POST http://httpbin.org/post \
+  -d "username=testuser&password=SuperSecret123" > /dev/null 2>&1
+
+echo "    → Request that returns 404"
+curl -s http://httpbin.org/status/404 > /dev/null 2>&1
+
+echo "    → Request that returns 500"
+curl -s http://httpbin.org/status/500 > /dev/null 2>&1
+
+sleep 3
+sudo kill $TCPDUMP_PID 2>/dev/null
+wait $TCPDUMP_PID 2>/dev/null
+
+echo "[+] Capture saved: captures/http_traffic.pcap"
+
+# --- Analyze with tshark ---
+echo ""
+echo "=============================================="
+echo " ANALYSIS RESULTS"
+echo "=============================================="
+
+if command -v tshark &> /dev/null; then
+  echo ""
+  echo "[*] HTTP REQUESTS found:"
+  tshark -r captures/http_traffic.pcap \
+    -Y "http.request" \
+    -T fields -e ip.src -e http.host -e http.request.method -e http.request.uri \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] HTTP RESPONSES (status codes):"
+  tshark -r captures/http_traffic.pcap \
+    -Y "http.response" \
+    -T fields -e ip.src -e ip.dst -e http.response.code \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] POST requests (potential credential exposure):"
+  tshark -r captures/http_traffic.pcap \
+    -Y "http.request.method==POST" \
+    -T fields -e ip.src -e http.host -e http.request.uri \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[!] SECURITY FINDING:"
+  echo "    POST requests over HTTP expose form data in cleartext."
+  echo "    Open captures/http_traffic.pcap in Wireshark and:"
+  echo "    1. Filter: http.request.method==POST"
+  echo "    2. Click the packet"
+  echo "    3. Expand 'HTML Form URL Encoded' in the packet details"
+  echo "    4. You will see the username and password in plain text"
+
+else
+  echo "[!] tshark not installed. Open captures/http_traffic.pcap in Wireshark."
+  echo ""
+  echo "    Useful Wireshark filters for this capture:"
+  echo "    http                              → All HTTP traffic"
+  echo "    http.request.method == POST       → POST requests only"
+  echo "    http.response.code >= 400         → Error responses"
+fi
+
+echo ""
+echo "[OK] HTTP analysis complete."

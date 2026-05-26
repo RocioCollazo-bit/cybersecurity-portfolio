@@ -1,0 +1,80 @@
+#!/bin/bash
+# =============================================================
+# Scenario 2 — DNS Traffic Capture & Analysis
+# Captures DNS queries and analyzes responses
+# =============================================================
+
+echo "=============================================="
+echo " DNS TRAFFIC CAPTURE & ANALYSIS"
+echo "=============================================="
+
+mkdir -p captures
+
+# --- Generate DNS traffic ---
+echo "[+] Generating DNS traffic..."
+echo "    Querying known domains..."
+nslookup google.com > /dev/null 2>&1
+nslookup github.com > /dev/null 2>&1
+nslookup stackoverflow.com > /dev/null 2>&1
+nslookup nonexistent-fake-domain-xyz999.com > /dev/null 2>&1  # Will produce NXDOMAIN
+
+# --- Capture DNS traffic in background ---
+echo "[+] Starting DNS capture (30 seconds)..."
+sudo tcpdump -i any port 53 -c 50 -w captures/dns_traffic.pcap 2>/dev/null &
+TCPDUMP_PID=$!
+
+# Generate more queries while capturing
+sleep 1
+for domain in amazon.com netflix.com linkedin.com twitter.com fake-malware-domain-abc123.com; do
+  nslookup $domain > /dev/null 2>&1
+  sleep 0.5
+done
+
+wait $TCPDUMP_PID 2>/dev/null
+
+echo "[+] Capture saved: captures/dns_traffic.pcap"
+
+# --- Analyze with tshark ---
+echo ""
+echo "=============================================="
+echo " ANALYSIS RESULTS"
+echo "=============================================="
+
+if command -v tshark &> /dev/null; then
+  echo ""
+  echo "[*] DNS QUERIES sent:"
+  tshark -r captures/dns_traffic.pcap \
+    -Y "dns.flags.response == 0" \
+    -T fields -e frame.number -e ip.src -e dns.qry.name \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] DNS RESPONSES received:"
+  tshark -r captures/dns_traffic.pcap \
+    -Y "dns.flags.response == 1" \
+    -T fields -e frame.number -e dns.qry.name -e dns.a -e dns.flags.rcode \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] NXDOMAIN responses (non-existent domains):"
+  tshark -r captures/dns_traffic.pcap \
+    -Y "dns.flags.rcode == 3" \
+    -T fields -e dns.qry.name \
+    2>/dev/null
+
+  echo ""
+  echo "[*] Summary — unique domains queried:"
+  tshark -r captures/dns_traffic.pcap \
+    -Y "dns.flags.response == 0" \
+    -T fields -e dns.qry.name \
+    2>/dev/null | sort -u | wc -l
+  echo "    domains"
+
+else
+  echo "[!] tshark not installed. Open captures/dns_traffic.pcap in Wireshark."
+  echo "    Wireshark filter to use: dns"
+fi
+
+echo ""
+echo "[OK] DNS analysis complete."
+echo "     Open captures/dns_traffic.pcap in Wireshark to explore visually."

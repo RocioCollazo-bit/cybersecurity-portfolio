@@ -1,0 +1,77 @@
+#!/bin/bash
+# =============================================================
+# Scenario 4 — Special Permissions (SUID / SGID / Sticky Bit)
+# =============================================================
+
+echo "=============================================="
+echo " SCENARIO 4: Special Permissions"
+echo "=============================================="
+
+# --- Create shared dev folder ---
+echo "[+] Creating shared dev workspace..."
+sudo mkdir -p /company/dev/shared
+sudo chown root:dev /company/dev/shared
+
+# Initial permissions (without special bits)
+echo ""
+echo "[*] Permissions WITHOUT special bits:"
+ls -la /company/dev/
+
+# --- Apply SGID ---
+echo ""
+echo "[+] Applying SGID to /company/dev/shared..."
+echo "    Effect: new files will automatically inherit group 'dev'"
+sudo chmod g+s /company/dev/shared
+
+# --- Apply Sticky Bit ---
+echo "[+] Applying Sticky Bit to /company/dev/shared..."
+echo "    Effect: users can only delete their OWN files"
+sudo chmod +t /company/dev/shared
+
+# --- Final permissions ---
+echo ""
+echo "[*] Permissions WITH SGID + Sticky Bit:"
+ls -la /company/dev/
+echo "    Look for 's' in group position and 't' at the end → drwxrwsr-t"
+
+# --- Test SGID: new file inherits group ---
+echo ""
+echo "=============================================="
+echo " TEST 1: SGID — Group Inheritance"
+echo "=============================================="
+echo "[*] alice creates a file in shared folder..."
+sudo -u alice touch /company/dev/shared/alice_notes.txt
+echo "[*] File created. Checking group ownership:"
+ls -la /company/dev/shared/alice_notes.txt
+echo "    Group should be 'dev' (not 'alice') ✅"
+
+# --- Test Sticky Bit: bob cannot delete alice's file ---
+echo ""
+echo "=============================================="
+echo " TEST 2: Sticky Bit — Deletion Protection"
+echo "=============================================="
+echo "[*] bob tries to delete alice's file..."
+sudo -u bob rm /company/dev/shared/alice_notes.txt 2>&1 \
+  && echo "    File deleted (sticky bit NOT working)" \
+  || echo "    Permission denied ✅ (sticky bit working correctly)"
+
+echo ""
+echo "[*] alice can delete her own file..."
+sudo -u alice rm /company/dev/shared/alice_notes.txt 2>&1 \
+  && echo "    File deleted ✅ (owner can always delete their own files)" \
+  || echo "    Unexpected error"
+
+# --- Summary table ---
+echo ""
+echo "=============================================="
+echo " SPECIAL PERMISSIONS SUMMARY"
+echo "=============================================="
+echo ""
+echo "  Bit        | Symbol | On Files              | On Directories"
+echo "  -----------|--------|-----------------------|------------------------"
+echo "  SUID       |   s    | Runs as file owner    | No effect"
+echo "  SGID       |   s    | Runs as file group    | New files inherit group"
+echo "  Sticky Bit |   t    | No modern effect      | Only owner can delete"
+echo ""
+
+echo "[OK] Scenario 4 complete."

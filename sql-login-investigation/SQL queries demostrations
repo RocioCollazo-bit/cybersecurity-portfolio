@@ -1,0 +1,172 @@
+-- =========================================================
+-- QUERY 1
+-- Retrieve failed login attempts after business hours
+-- =========================================================
+
+SELECT *
+FROM log_in_attempts
+WHERE login_time > '18:00:00'
+  AND success = FALSE;
+
+-- Demonstrates:
+-- * AND operator
+-- * Time filtering
+-- * Failed login investigation
+
+
+
+-- =========================================================
+-- QUERY 2
+-- Retrieve login attempts on suspicious dates
+-- =========================================================
+
+SELECT *
+FROM log_in_attempts
+WHERE login_date = '2026-05-20'
+   OR login_date = '2026-05-21';
+
+-- Demonstrates:
+-- * OR operator
+-- * Date filtering
+-- * Incident timeline analysis
+
+
+
+-- =========================================================
+-- QUERY 3
+-- Retrieve login attempts outside Australia
+-- =========================================================
+
+SELECT *
+FROM log_in_attempts
+WHERE NOT country = 'Australia';
+
+-- Demonstrates:
+-- * NOT operator
+-- * Foreign login detection
+
+
+
+-- =========================================================
+-- QUERY 4
+-- Retrieve failed login attempts from suspicious countries
+-- =========================================================
+
+SELECT username,
+       country,
+       ip_address
+FROM log_in_attempts
+WHERE success = FALSE
+  AND country IN ('Russia', 'China', 'North Korea');
+
+-- Demonstrates:
+-- * IN operator
+-- * Threat investigation
+-- * Geographic filtering
+
+
+
+-- =========================================================
+-- QUERY 5
+-- Count failed login attempts per user
+-- =========================================================
+
+SELECT username,
+       COUNT(*) AS failed_attempts
+FROM log_in_attempts
+WHERE success = FALSE
+GROUP BY username;
+
+-- Demonstrates:
+-- * COUNT()
+-- * GROUP BY
+-- * User activity analysis
+
+
+
+-- =========================================================
+-- QUERY 6
+-- Detect users with multiple failed login attempts
+-- =========================================================
+
+SELECT username,
+       COUNT(*) AS failed_attempts
+FROM log_in_attempts
+WHERE success = FALSE
+GROUP BY username
+HAVING COUNT(*) >= 2;
+
+-- Demonstrates:
+-- * HAVING clause
+-- * Aggregation filtering
+-- * Suspicious activity detection
+
+
+
+-- =========================================================
+-- QUERY 7
+-- Retrieve login attempts during unusual hours
+-- =========================================================
+
+SELECT username,
+       login_time,
+       country
+FROM log_in_attempts
+WHERE login_time < '06:00:00'
+   OR login_time > '22:00:00';
+
+-- Demonstrates:
+-- * OR operator
+-- * Time analysis
+-- * Anomaly detection
+
+
+
+-- =========================================================
+-- QUERY 8
+-- Retrieve unique countries from login attempts
+-- =========================================================
+
+SELECT DISTINCT country
+FROM log_in_attempts;
+
+-- Demonstrates:
+-- * DISTINCT keyword
+-- * Data deduplication
+
+
+
+-- =========================================================
+-- QUERY 9
+-- Retrieve successful login attempts sorted by date
+-- =========================================================
+
+SELECT username,
+       login_date,
+       login_time
+FROM log_in_attempts
+WHERE success = TRUE
+ORDER BY login_date DESC;
+
+-- Demonstrates:
+-- * ORDER BY
+-- * DESC sorting
+-- * Login tracking
+
+
+
+-- =========================================================
+-- QUERY 10
+-- Retrieve login attempts from a suspicious IP range
+-- =========================================================
+
+SELECT username,
+       ip_address,
+       country
+FROM log_in_attempts
+WHERE ip_address LIKE '203.%';
+
+-- Demonstrates:
+-- * LIKE operator
+-- * Pattern matching
+-- * IP address investigation

@@ -1,0 +1,64 @@
+#!/bin/bash
+# =============================================================
+# Scenario 2 — File Permission Hardening
+# Locks down company directories from 777 to 750
+# =============================================================
+
+echo "=============================================="
+echo " SCENARIO 2: File Permission Hardening"
+echo "=============================================="
+
+# --- Create directory structure ---
+echo "[+] Creating company directory structure..."
+sudo mkdir -p /company/dev
+sudo mkdir -p /company/marketing
+sudo mkdir -p /company/finance/reports
+
+# --- Create sample files ---
+echo "[+] Creating sample files..."
+sudo bash -c 'echo "Q1 Budget: $500,000" > /company/finance/reports/Q1_budget.txt'
+sudo bash -c 'echo "Salary data - CONFIDENTIAL" > /company/finance/reports/salaries.txt'
+sudo bash -c 'echo "Sprint 12 plan" > /company/dev/sprint_plan.txt'
+sudo bash -c 'echo "Campaign Q2" > /company/marketing/campaign.txt'
+
+# --- Show permissions BEFORE hardening ---
+echo ""
+echo "[*] Permissions BEFORE hardening:"
+ls -la /company/
+
+# --- Apply ownership ---
+echo ""
+echo "[+] Assigning group ownership..."
+sudo chown -R root:finance /company/finance
+sudo chown -R root:dev /company/dev
+sudo chown -R root:marketing /company/marketing
+
+# --- Apply permissions: 750 = rwxr-x--- ---
+echo "[+] Applying 750 permissions..."
+sudo chmod -R 750 /company/finance
+sudo chmod -R 750 /company/dev
+sudo chmod -R 750 /company/marketing
+
+# --- Show permissions AFTER hardening ---
+echo ""
+echo "[*] Permissions AFTER hardening:"
+ls -la /company/
+echo ""
+ls -la /company/finance/reports/
+
+# --- Test access control ---
+echo ""
+echo "=============================================="
+echo " ACCESS CONTROL TEST"
+echo "=============================================="
+echo "[*] Testing: alice (dev) tries to access /company/finance..."
+sudo -u alice ls /company/finance/ 2>&1 || echo "    Result: Permission denied ✅ (expected)"
+
+echo "[*] Testing: alice (dev) can access /company/dev..."
+sudo -u alice ls /company/dev/ && echo "    Result: Access granted ✅ (expected)"
+
+echo "[*] Testing: david (finance) tries to access /company/dev..."
+sudo -u david ls /company/dev/ 2>&1 || echo "    Result: Permission denied ✅ (expected)"
+
+echo ""
+echo "[OK] Scenario 2 complete."

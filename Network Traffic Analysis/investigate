@@ -1,0 +1,126 @@
+#!/bin/bash
+# =============================================================
+# Scenario 5 — Suspicious Traffic Investigation
+# Full analysis workflow: summarize → filter → investigate
+# =============================================================
+
+echo "=============================================="
+echo " SUSPICIOUS TRAFFIC INVESTIGATION"
+echo "=============================================="
+
+# Check for a capture file to analyze
+PCAP_FILE="${1:-captures/dns_traffic.pcap}"
+
+if [ ! -f "$PCAP_FILE" ]; then
+  echo "[!] No capture file found at: $PCAP_FILE"
+  echo "    Run scripts 01-03 first to generate capture files, or pass a pcap as argument:"
+  echo "    bash 04_investigate.sh path/to/your.pcap"
+  exit 1
+fi
+
+echo "[+] Analyzing: $PCAP_FILE"
+echo ""
+
+if ! command -v tshark &> /dev/null; then
+  echo "[!] tshark is required for this script."
+  echo "    Install: sudo apt install tshark"
+  exit 1
+fi
+
+REPORT_FILE="investigation_report_$(date +%Y%m%d_%H%M%S).txt"
+
+{
+  echo "========================================"
+  echo " NETWORK TRAFFIC INVESTIGATION REPORT"
+  echo " File:      $PCAP_FILE"
+  echo " Analyst:   $(whoami)"
+  echo " Date:      $(date)"
+  echo "========================================"
+  echo ""
+
+  # --- Step 1: High-level summary ---
+  echo "--- [1] CAPTURE SUMMARY ---"
+  if command -v capinfos &> /dev/null; then
+    capinfos "$PCAP_FILE" 2>/dev/null
+  else
+    tshark -r "$PCAP_FILE" -q -z io,phs 2>/dev/null | head -30
+  fi
+  echo ""
+
+  # --- Step 2: Top talkers ---
+  echo "--- [2] TOP COMMUNICATING HOSTS ---"
+  echo "Most active source IPs (by packet count):"
+  tshark -r "$PCAP_FILE" -T fields -e ip.src 2>/dev/null | \
+    sort | uniq -c | sort -rn | head 10
+  echo ""
+
+  # --- Step 3: Protocol breakdown ---
+  echo "--- [3] PROTOCOL BREAKDOWN ---"
+  tshark -r "$PCAP_FILE" -q -z io,phs 2>/dev/null | head 40
+  echo ""
+
+  # --- Step 4: DNS investigation ---
+  echo "--- [4] DNS INVESTIGATION ---"
+  echo "All DNS queries:"
+  tshark -r "$PCAP_FILE" -Y "dns.flags.response==0" \
+    -T fields -e ip.src -e dns.qry.name 2>/dev/null | sort -u
+  echo ""
+  echo "NXDOMAIN responses (non-existent domains):"
+  tshark -r "$PCAP_FILE" -Y "dns.flags.rcode==3" \
+    -T fields -e dns.qry.name 2>/dev/null
+  echo ""
+  echo "Unusually long domain names (>40 chars — possible tunneling):"
+  tshark -r "$PCAP_FILE" -Y "dns.flags.response==0" \
+    -T fields -e dns.qry.name 2>/dev/null | \
+    awk 'length($1) > 40 {print "[LONG] " $1}'
+  echo ""
+
+  # --- Step 5: TCP connection attempts ---
+  echo "--- [5] TCP CONNECTION ATTEMPTS ---"
+  echo "SYN packets (new connections initiated):"
+  tshark -r "$PCAP_FILE" -Y "tcp.flags.syn==1 and tcp.flags.ack==0" \
+    -T fields -e ip.src -e ip.dst -e tcp.dstport 2>/dev/null | \
+    sort | uniq -c | sort -rn | head 20
+  echo ""
+  echo "RST packets (rejected connections):"
+  tshark -r "$PCAP_FILE" -Y "tcp.flags.reset==1" \
+    -T fields -e ip.src -e ip.dst -e tcp.dstport 2>/dev/null | \
+    sort | uniq -c | sort -rn | head 10
+  echo ""
+
+  # --- Step 6: HTTP inspection ---
+  echo "--- [6] HTTP TRAFFIC INSPECTION ---"
+  echo "HTTP requests found:"
+  tshark -r "$PCAP_FILE" -Y "http.request" \
+    -T fields -e ip.src -e http.host -e http.request.method -e http.request.uri \
+    2>/dev/null
+  echo ""
+  echo "HTTP POST requests (possible credential exposure):"
+  tshark -r "$PCAP_FILE" -Y "http.request.method==POST" \
+    -T fields -e ip.src -e http.host -e http.request.uri \
+    2>/dev/null
+  echo ""
+
+  # --- Step 7: Large packets ---
+  echo "--- [7] LARGE PACKET TRANSFERS (>1400 bytes) ---"
+  echo "Possible data exfiltration:"
+  tshark -r "$PCAP_FILE" -Y "frame.len > 1400" \
+    -T fields -e ip.src -e ip.dst -e frame.len -e frame.protocols \
+    2>/dev/null | sort -k3 -rn | head 10
+  echo ""
+
+  echo "========================================"
+  echo " END OF REPORT"
+  echo "========================================"
+
+} | tee "$REPORT_FILE"
+
+echo ""
+echo "[OK] Investigation complete."
+echo "     Report saved: $REPORT_FILE"
+echo ""
+echo "     Next steps:"
+echo "     1. Open the capture in Wireshark for visual analysis"
+echo "     2. Right-click any interesting packet → Follow → TCP/UDP Stream"
+echo "     3. Use Statistics → Conversations to see full picture"
+echo "     4. Use Statistics → Protocol Hierarchy for traffic breakdown"

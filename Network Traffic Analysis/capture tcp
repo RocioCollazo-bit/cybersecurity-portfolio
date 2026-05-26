@@ -1,0 +1,98 @@
+#!/bin/bash
+# =============================================================
+# Scenario 3 — TCP/IP Handshake Capture & Analysis
+# Captures and reconstructs TCP connections
+# =============================================================
+
+echo "=============================================="
+echo " TCP/IP HANDSHAKE CAPTURE & ANALYSIS"
+echo "=============================================="
+
+mkdir -p captures
+
+# --- Capture TCP handshakes ---
+echo "[+] Starting TCP capture..."
+sudo tcpdump -i any \
+  'tcp[tcpflags] & (tcp-syn|tcp-ack|tcp-fin|tcp-rst) != 0' \
+  -c 60 -w captures/tcp_handshake.pcap 2>/dev/null &
+TCPDUMP_PID=$!
+
+sleep 1
+
+# --- Generate TCP connections ---
+echo "[+] Generating TCP connections to capture..."
+curl -s http://example.com > /dev/null 2>&1 &
+curl -s http://httpbin.org/get > /dev/null 2>&1 &
+# Attempt connection to closed port (generates RST)
+nc -z -w 1 localhost 9999 > /dev/null 2>&1 &
+
+wait
+sleep 2
+sudo kill $TCPDUMP_PID 2>/dev/null
+wait $TCPDUMP_PID 2>/dev/null
+
+echo "[+] Capture saved: captures/tcp_handshake.pcap"
+
+# --- Analyze with tshark ---
+echo ""
+echo "=============================================="
+echo " ANALYSIS RESULTS"
+echo "=============================================="
+
+if command -v tshark &> /dev/null; then
+  echo ""
+  echo "[*] SYN packets (new connections being initiated):"
+  tshark -r captures/tcp_handshake.pcap \
+    -Y "tcp.flags.syn==1 and tcp.flags.ack==0" \
+    -T fields -e frame.number -e ip.src -e ip.dst -e tcp.dstport \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] SYN-ACK packets (server accepting connections):"
+  tshark -r captures/tcp_handshake.pcap \
+    -Y "tcp.flags.syn==1 and tcp.flags.ack==1" \
+    -T fields -e frame.number -e ip.src -e ip.dst -e tcp.srcport \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] RST packets (connections forcefully closed):"
+  tshark -r captures/tcp_handshake.pcap \
+    -Y "tcp.flags.reset==1" \
+    -T fields -e frame.number -e ip.src -e ip.dst -e tcp.dstport \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] FIN packets (graceful connection close):"
+  tshark -r captures/tcp_handshake.pcap \
+    -Y "tcp.flags.fin==1" \
+    -T fields -e frame.number -e ip.src -e ip.dst \
+    2>/dev/null | column -t
+
+  echo ""
+  echo "[*] Unique destination ports contacted:"
+  tshark -r captures/tcp_handshake.pcap \
+    -Y "tcp.flags.syn==1 and tcp.flags.ack==0" \
+    -T fields -e tcp.dstport \
+    2>/dev/null | sort -u
+
+else
+  echo "[!] tshark not installed. Open captures/tcp_handshake.pcap in Wireshark."
+  echo ""
+  echo "    Useful Wireshark filters for this capture:"
+  echo "    tcp.flags.syn==1 and tcp.flags.ack==0     → SYN packets only"
+  echo "    tcp.flags.reset==1                         → RST packets"
+  echo "    tcp.stream eq 0                            → First TCP conversation"
+fi
+
+echo ""
+echo "=============================================="
+echo " HOW TO READ THE 3-WAY HANDSHAKE IN WIRESHARK"
+echo "=============================================="
+echo ""
+echo "  1. Open captures/tcp_handshake.pcap in Wireshark"
+echo "  2. Filter: tcp.flags.syn==1"
+echo "  3. Click on a SYN packet"
+echo "  4. Right-click → Follow → TCP Stream"
+echo "  5. You'll see the full conversation reconstructed"
+echo ""
+echo "[OK] TCP analysis complete."

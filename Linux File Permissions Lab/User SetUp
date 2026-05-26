@@ -1,0 +1,54 @@
+#!/bin/bash
+# =============================================================
+# Scenario 1 — User & Group Management
+# Simulates setting up a small company's user structure
+# =============================================================
+ 
+echo "=============================================="
+echo " SCENARIO 1: User & Group Management"
+echo "=============================================="
+ 
+# --- Create department groups ---
+echo "[+] Creating department groups..."
+sudo groupadd dev
+sudo groupadd marketing
+sudo groupadd finance
+echo "    Groups created: dev, marketing, finance"
+ 
+# --- Create users ---
+echo "[+] Creating users..."
+sudo useradd -m -s /bin/bash alice
+sudo useradd -m -s /bin/bash bob
+sudo useradd -m -s /bin/bash carol
+sudo useradd -m -s /bin/bash david
+ 
+# --- Assign users to groups ---
+echo "[+] Assigning users to groups..."
+sudo usermod -aG dev alice
+sudo usermod -aG dev bob
+sudo usermod -aG marketing carol
+sudo usermod -aG finance david
+ 
+# --- Set default passwords (lab only — never do this in production!) ---
+echo "[+] Setting passwords..."
+echo "alice:LabPass123!" | sudo chpasswd
+echo "bob:LabPass123!" | sudo chpasswd
+echo "carol:LabPass123!" | sudo chpasswd
+echo "david:LabPass123!" | sudo chpasswd
+ 
+# --- Verify ---
+echo ""
+echo "=============================================="
+echo " VERIFICATION"
+echo "=============================================="
+echo "[*] Group memberships:"
+cat /etc/group | grep -E "^dev:|^marketing:|^finance:"
+echo ""
+echo "[*] User 'alice' identity:"
+id alice
+echo ""
+echo "[*] User 'david' identity:"
+id david
+ 
+echo ""
+echo "[OK] Scenario 1 complete."
